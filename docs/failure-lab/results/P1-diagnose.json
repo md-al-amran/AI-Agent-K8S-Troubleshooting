@@ -1,0 +1,163 @@
+{
+  "label": "P1-diagnose",
+  "cluster": "kind-kubernetes-demo-cluster",
+  "namespace": "ai-agent-failure-test",
+  "time": "2026-11-17T21:39:29+00:00",
+  "kubernetes_status": [
+    {
+      "pod": "crashloop-nginx",
+      "status": "CrashLoopBackOff",
+      "reasons": [
+        "Error",
+        "CrashLoopBackOff"
+      ],
+      "ready": "0/1",
+      "restarts": 3,
+      "message": null
+    },
+    {
+      "pod": "imagepull-nginx",
+      "status": "ImagePullBackOff",
+      "reasons": [
+        "Pending",
+        "ImagePullBackOff"
+      ],
+      "ready": "0/1",
+      "restarts": 0,
+      "message": null
+    },
+    {
+      "pod": "pending-nginx",
+      "status": "Pending",
+      "reasons": [
+        "Pending"
+      ],
+      "ready": "0/1",
+      "restarts": 0,
+      "message": "0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling."
+    }
+  ],
+  "evidence": {
+    "logs": [
+      {
+        "pod": "crashloop-nginx",
+        "container": "nginx",
+        "previous": false,
+        "findings": [
+          "[config] nginx: [emerg] open() \"/etc/nginx/conf.d/site.conf\" failed (2: No such file or directory)"
+        ]
+      }
+    ],
+    "events": [
+      "Pod/imagepull-nginx Failed x8: Failed to pull image \"nginx:1.27-doesnotexist\": rpc error: code = NotFound desc = failed to pull and unpack image \"docker.io/library/nginx:1.27-doesnotexist\": failed to resolve reference \"docker.io/library/nginx:1.27-doesnotexist\": docker.io/library/nginx:1.27-doesnotexist: not found",
+      "Pod/crashloop-nginx BackOff x3: Back-off restarting failed container nginx in pod crashloop-nginx_ai-agent-failure-test(bd2d1bf4-430c-4b63-9d05-f2942a8d576a)",
+      "Pod/imagepull-nginx BackOff x2: Back-off pulling image \"nginx:1.27-doesnotexist\"",
+      "Pod/pending-nginx FailedScheduling x1: 0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector. preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling."
+    ],
+    "deployments": [],
+    "network": [],
+    "dns": {
+      "healthy": true,
+      "coredns_pods_ready": "2/2",
+      "dns_service_found": true,
+      "dns_ready_endpoints": 2,
+      "issues": []
+    },
+    "failed_steps": []
+  },
+  "namespace_healthy": false,
+  "ai": {
+    "model": "nvidia/nemotron-3.5-super-vl:free",
+    "cluster_healthy": false,
+    "summary": "Four workloads cannot run across two namespaces (two fail at startup from a missing config file, an invalid image, and a nonexistent shell path, and one cannot be scheduled), while deployments, services, and DNS are healthy.",
+    "issues_for_namespace": [
+      {
+        "title": "nginx container exits immediately because /etc/nginx/conf.d/site.conf is missing",
+        "severity": "high",
+        "affected_resources": [
+          "Pod/ai-agent-failure-test/crashloop-nginx"
+        ],
+        "root_cause": "The container's nginx configuration references /etc/nginx/conf.d/site.conf, which does not exist in the image, so nginx fails to start and exits with code 1 on every attempt.",
+        "explanation": "crashloop-nginx is in CrashLoopBackOff with ready 0/1, 3 restarts, and last exit code 1. The container log shows `nginx: [emerg] open() \"/etc/nginx/conf.d/site.conf\" failed (2: No such file or directory)`, and a Warning event reports repeated \"Back-off restarting failed container nginx.\" CrashLoopBackOff is the symptom; the missing config file is the cause.",
+        "evidence": [
+          "Pod crashloop-nginx status CrashLoopBackOff, ready 0/1, restarts 3, last exit code 1, reason Error",
+          "Container log: nginx: [emerg] open() \"/etc/nginx/conf.d/site.conf\" failed (2: No such file or directory)",
+          "Warning event: Back-off restarting failed container nginx in pod crashloop-nginx (count 3)"
+        ],
+        "fix": "Provide /etc/nginx/conf.d/site.conf in the container (rebuild the image with the file, or mount a ConfigMap at that path) and ensure nginx.conf references an existing file, then roll out the corrected pod template and recreate the pod. Container image and volume mounts are immutable on a running pod, so the template must be corrected and the pod recreated (or the owning Deployment patched).",
+        "kubectl_commands": [
+          "kubectl -n ai-agent-failure-test logs crashloop-nginx",
+          "kubectl -n ai-agent-failure-test patch pod crashloop-nginx --type=merge -p '{\"spec\":{\"containers\":[{\"name\":\"nginx\",\"volumeMounts\":[{\"name\":\"site-conf\",\"mountPath\":\"/etc/nginx/conf.d/site.conf\",\"subPath\":\"site.conf\"}]}],\"volumes\":[{\"name\":\"site-conf\",\"configMap\":{\"name\":\"nginx-site-conf\"}}]}}'",
+          "kubectl -n ai-agent-failure-test wait --for=condition=Ready pod/crashloop-nginx --timeout=60s"
+        ],
+        "prevention": "Validate the nginx config with `nginx -t` in CI and require the config file to be present via a ConfigMap before deploying.",
+        "confidence": 95,
+        "confidence_reasons": [
+          "The log line directly names the missing file, and the pod state (CrashLoopBackOff, exit code 1, repeated restarts) agrees with a failing startup.",
+          "Pod ai-agent-failure-test/crashloop-nginx is CrashLoopBackOff with 3 restart(s)",
+          "Logs show: nginx: [emerg] open() \"/etc/nginx/conf.d/site.conf\" failed (2: No such file or directory)",
+          "3 event(s) for this pod: BackOff"
+        ],
+        "warnings": []
+      },
+      {
+        "title": "Pod cannot start because image nginx:1.27-doesnotexist does not exist",
+        "severity": "high",
+        "affected_resources": [
+          "Pod/ai-agent-failure-test/imagepull-nginx"
+        ],
+        "root_cause": "The container image tag `nginx:1.27-doesnotexist` is not present in the container registry, so the kubelet cannot pull it and the pod stays in ImagePullBackOff.",
+        "explanation": "imagepull-nginx is Pending with reason ImagePullBackOff and 0 restarts (never started). The container waiting message and a FailedPull Warning event both state the image `docker.io/library/nginx:1.27-doesnotexist` is not found. This directly explains why the pod cannot run.",
+        "evidence": [
+          "Pod imagepull-nginx status ImagePullBackOff, phase Pending, ready 0/1, restarts 0",
+          "Container message: failed to resolve reference \"docker.io/library/nginx:1.27-doesnotexist\": not found",
+          "Warning event: Failed to pull image \"nginx:1.27-doesnotexist\": ... not found (count 8)"
+        ],
+        "fix": "Change the container image to a valid tag that exists in the registry (confirm the tag first, e.g. `nginx:1.27` or `nginx:stable`), then redeploy the pod from the corrected template. The image field is immutable on a running pod, so the pod must be recreated with the corrected image.",
+        "kubectl_commands": [
+          "kubectl -n ai-agent-failure-test describe pod imagepull-nginx",
+          "kubectl -n ai-agent-failure-test patch pod imagepull-nginx --type=merge -p '{\"spec\":{\"containers\":[{\"name\":\"nginx\",\"image\":\"<valid-image-tag>\"}]}}'",
+          "kubectl -n ai-agent-failure-test wait --for=condition=Ready pod/imagepull-nginx --timeout=60s"
+        ],
+        "prevention": "Enforce image-tag validation in CI (reject unknown or `latest` tags) and verify the image exists in the registry before deploying.",
+        "confidence": 98,
+        "confidence_reasons": [
+          "The pod message and Warning event state directly that the image reference is not found, and the pod state (ImagePullBackOff, never started) agrees.",
+          "Pod ai-agent-failure-test/imagepull-nginx is ImagePullBackOff with 0 restart(s)",
+          "10 event(s) for this pod: BackOff, FailedPull"
+        ],
+        "warnings": []
+      },
+      {
+        "title": "Pod cannot be scheduled because node affinity matches no node",
+        "severity": "high",
+        "affected_resources": [
+          "Pod/ai-agent-failure-test/pending-nginx"
+        ],
+        "root_cause": "The pod's node affinity/selector requires a node that does not exist in the cluster, so the scheduler finds 0/1 available nodes and the pod remains Pending.",
+        "explanation": "pending-nginx is Pending with the message `0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector`, and a FailedScheduling Warning event repeats the same. With only one node and no match, the pod can never be placed.",
+        "evidence": [
+          "Pod pending-nginx status Pending, message: 0/1 nodes are available: 1 node(s) didn't match Pod's node affinity/selector",
+          "Warning event: FailedScheduling for Pod/pending-nginx with the same node-affinity message (count 1)"
+        ],
+        "fix": "Remove or relax the pod's nodeAffinity/nodeSelector so it matches the existing node, or add a node with the required labels, then redeploy the pod. The affinity/selector is part of the immutable pod template, so correct the manifest and redeploy rather than editing the running pod.",
+        "kubectl_commands": [
+          "kubectl -n ai-agent-failure-test get pod pending-nginx -o yaml",
+          "kubectl -n ai-agent-failure-test patch pod pending-nginx --type=merge -p '{\"spec\":{\"affinity\":null}}'",
+          "kubectl -n ai-agent-failure-test wait --for=condition=Ready pod/pending-nginx --timeout=60s"
+        ],
+        "prevention": "Validate node affinity/selectors against actual node labels in CI or with a policy engine (e.g., Kyverno/OPA) before admitting pods.",
+        "confidence": 95,
+        "confidence_reasons": [
+          "The pod message and FailedScheduling event state directly that no node matches the affinity/selector, and the pod remains Pending (unscheduled).",
+          "Pod ai-agent-failure-test/pending-nginx is Pending with 0 restart(s)",
+          "1 event(s) for this pod: FailedScheduling"
+        ],
+        "warnings": []
+      }
+    ],
+    "other_issues": [
+      "Container fails to start because its shell path is a Windows path that does not exist on the Linux node (Pod/default/nginx-crash)"
+    ]
+  }
+}

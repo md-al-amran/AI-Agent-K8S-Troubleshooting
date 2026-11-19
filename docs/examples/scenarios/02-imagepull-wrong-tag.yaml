@@ -1,0 +1,18 @@
+# Scenario 2: ImagePullBackOff caused by an image tag that does not exist.
+apiVersion: v1
+kind: Namespace
+metadata: {name: scenario-imagepull}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: frontend, namespace: scenario-imagepull}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: frontend}}
+  template:
+    metadata: {labels: {app: frontend}}
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.27.99-typo
+        ports: [{containerPort: 80}]

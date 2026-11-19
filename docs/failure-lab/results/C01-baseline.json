@@ -1,0 +1,31 @@
+{
+  "label": "C01-baseline",
+  "cluster": "kind-ecommerce-cluster-01",
+  "namespace": "ecommerce",
+  "time": "2026-11-17T21:47:26+00:00",
+  "kubernetes_status": [],
+  "evidence": {
+    "logs": [],
+    "events": [],
+    "deployments": [],
+    "network": [],
+    "dns": {
+      "healthy": true,
+      "coredns_pods_ready": "2/2",
+      "dns_service_found": true,
+      "dns_ready_endpoints": 2,
+      "issues": []
+    },
+    "failed_steps": []
+  },
+  "namespace_healthy": true,
+  "ai": {
+    "model": null,
+    "cluster_healthy": true,
+    "summary": "No critical Kubernetes issues detected. Cluster appears healthy.",
+    "issues_for_namespace": [],
+    "other_issues": [
+      "Cluster healthy ()"
+    ]
+  }
+}

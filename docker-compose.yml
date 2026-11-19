@@ -1,0 +1,44 @@
+name: ai-kubernetes-agent
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      # Path inside the container. Overrides any host path set in backend/.env.
+      KUBECONFIG_PATH: /root/.kube/config
+    volumes:
+      # Your kubeconfig, read-only. Set KUBE_CONFIG_DIR to use another folder.
+      # For a local kind cluster, also add docker-compose.kind.yml (see that file).
+      - ${KUBE_CONFIG_DIR:-~/.kube}:/root/.kube:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+        # Read from .env next to this file (see .env.example). Public values, safe in the browser.
+        NEXT_PUBLIC_INSFORGE_BASE_URL: ${NEXT_PUBLIC_INSFORGE_BASE_URL:-}
+        NEXT_PUBLIC_INSFORGE_ANON_KEY: ${NEXT_PUBLIC_INSFORGE_ANON_KEY:-}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy

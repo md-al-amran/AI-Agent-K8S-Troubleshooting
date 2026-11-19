@@ -1,0 +1,31 @@
+{
+  "label": "C02-baseline",
+  "cluster": "kind-ecommerce-cluster-02",
+  "namespace": "ecommerce",
+  "time": "2026-11-17T21:47:28+00:00",
+  "kubernetes_status": [],
+  "evidence": {
+    "logs": [],
+    "events": [],
+    "deployments": [],
+    "network": [],
+    "dns": {
+      "healthy": true,
+      "coredns_pods_ready": "2/2",
+      "dns_service_found": true,
+      "dns_ready_endpoints": 2,
+      "issues": []
+    },
+    "failed_steps": []
+  },
+  "namespace_healthy": true,
+  "ai": {
+    "model": "nvidia/nemotron-3.5-super-vl:free",
+    "cluster_healthy": true,
+    "summary": "All 13 pods, 6 deployments, 6 services, and CoreDNS are healthy; the single 5-minute-old warning about a duplicate endpoints object is not correlated with any pod, deployment, or network failure, so there is no active incident.",
+    "issues_for_namespace": [],
+    "other_issues": [
+      "Cluster healthy ()"
+    ]
+  }
+}

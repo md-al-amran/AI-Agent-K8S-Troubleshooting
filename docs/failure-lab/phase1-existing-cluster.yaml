@@ -1,0 +1,53 @@
+# Phase 1: three failing test pods on the EXISTING cluster, isolated in their own namespace.
+#   kubectl --context kind-kubernetes-demo-cluster apply -f phase1-existing-cluster.yaml
+# Cleanup:
+#   kubectl --context kind-kubernetes-demo-cluster delete namespace ai-agent-failure-test
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-agent-failure-test
+  labels: {purpose: ai-agent-failure-test}
+---
+# 1. CrashLoopBackOff: NGINX whose command exits with status 1.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: crashloop-nginx
+  namespace: ai-agent-failure-test
+  labels: {app: crashloop-nginx, scenario: crashloop}
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.27
+    command: ["sh", "-c"]
+    args:
+    - |
+      echo "nginx: starting with config /etc/nginx/conf.d/site.conf"
+      echo "nginx: [emerg] open() \"/etc/nginx/conf.d/site.conf\" failed (2: No such file or directory)" >&2
+      exit 1
+---
+# 2. ImagePullBackOff: image tag that does not exist.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: imagepull-nginx
+  namespace: ai-agent-failure-test
+  labels: {app: imagepull-nginx, scenario: imagepull}
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.27-doesnotexist
+---
+# 3. Pending: requires a node label no node has.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pending-nginx
+  namespace: ai-agent-failure-test
+  labels: {app: pending-nginx, scenario: pending}
+spec:
+  nodeSelector:
+    disktype: nvme-gpu-test
+  containers:
+  - name: nginx
+    image: nginx:1.27

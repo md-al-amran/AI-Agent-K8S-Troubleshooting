@@ -1,0 +1,21 @@
+# Optional override for local kind clusters.
+#
+# kind clusters listen on 127.0.0.1, which is the container itself from inside
+# Docker. This joins kind's Docker network and tells the backend to reach every
+# kind cluster in your kubeconfig by its node name instead
+# (e.g. https://my-cluster-control-plane:6443). Other clusters are unaffected.
+#
+# Run:
+#   docker compose -f docker-compose.yml -f docker-compose.kind.yml up --build
+
+services:
+  backend:
+    environment:
+      KIND_INTERNAL_NETWORK: "true"
+    networks:
+      - default
+      - kind
+
+networks:
+  kind:
+    external: true

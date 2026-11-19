@@ -1,0 +1,29 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+.env
+.env.local
+.mcp.json
+backend/.env
+frontend/.env.local
+
+node_modules/
+.next/
+out/
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Generated kubeconfigs (docker-compose.kind.yml)
+.kube/
+
+# Lab backups (contain Secrets)
+backups/
+
+# TypeScript build cache
+*.tsbuildinfo

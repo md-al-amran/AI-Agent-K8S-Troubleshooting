@@ -1,0 +1,22 @@
+# Scenario 3: OOMKilled. The worker needs ~250Mi but its memory limit is 100Mi.
+apiVersion: v1
+kind: Namespace
+metadata: {name: scenario-oom}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: report-worker, namespace: scenario-oom}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: report-worker}}
+  template:
+    metadata: {labels: {app: report-worker}}
+    spec:
+      containers:
+      - name: worker
+        image: polinux/stress:1.0.4
+        command: ["stress"]
+        args: ["--vm", "1", "--vm-bytes", "250M", "--vm-hang", "1"]
+        resources:
+          requests: {memory: 50Mi}
+          limits: {memory: 100Mi}

@@ -1,0 +1,85 @@
+{
+  "label": "F4-diagnose",
+  "cluster": "kind-ecommerce-cluster-02",
+  "namespace": "ecommerce",
+  "time": "2026-11-17T21:49:42+00:00",
+  "kubernetes_status": [
+    {
+      "pod": "backend-api-85db55fcd-c9rhr",
+      "status": "CrashLoopBackOff",
+      "reasons": [
+        "CrashLoopBackOff"
+      ],
+      "ready": "0/1",
+      "restarts": 3,
+      "message": null
+    }
+  ],
+  "evidence": {
+    "logs": [
+      {
+        "pod": "backend-api-85db55fcd-c9rhr",
+        "container": "backend-api",
+        "previous": true,
+        "findings": [
+          "[config] FATAL: invalid configuration APP_MODE='prodution' (from ConfigMap backend-config); expected 'development' or 'production'"
+        ]
+      }
+    ],
+    "events": [
+      "Pod/backend-api-85db55fcd-c9rhr BackOff x5: Back-off restarting failed container backend-api in pod backend-api-85db55fcd-c9rhr_ecommerce(92bbcc74-9bf3-40c3-8a0e-c6b59b119b4d)",
+      "Pod/backend-api-85db55fcd-c9rhr Unhealthy x6: Readiness probe failed: Get \"http://10.244.0.10:8080/healthz\": dial tcp 10.244.0.10:8080: connect: connection refused"
+    ],
+    "deployments": [],
+    "network": [],
+    "dns": {
+      "healthy": true,
+      "coredns_pods_ready": "2/2",
+      "dns_service_found": true,
+      "dns_ready_endpoints": 2,
+      "issues": []
+    },
+    "failed_steps": []
+  },
+  "namespace_healthy": false,
+  "ai": {
+    "model": "nvidia/nemotron-3.5-super-vl:free",
+    "cluster_healthy": false,
+    "summary": "One backend API pod in the ecommerce namespace is crash looping because its ConfigMap contains an invalid APP_MODE value, while the rest of the cluster appears healthy.",
+    "issues_for_namespace": [
+      {
+        "title": "Backend API crash loop due to invalid APP_MODE in ConfigMap",
+        "severity": "critical",
+        "affected_resources": [
+          "ConfigMap/ecommerce/backend-config",
+          "Pod/ecommerce/backend-api-85db55fcd-c9rhr",
+          "Deployment/ecommerce/backend-api"
+        ],
+        "root_cause": "The ConfigMap backend-config sets APP_MODE to 'prodution' (a typo for 'production'), which the backend-api application rejects at startup, causing exit code 1 and CrashLoopBackOff.",
+        "explanation": "The previous container log for backend-api-85db55fcd-c9rhr contains a FATAL line stating APP_MODE='prodution' is invalid and must be 'development' or 'production'. The pod is in CrashLoopBackOff with 3 restarts and last_exit_code 1, matching a startup failure. The readiness probe connection-refused warning is a symptom: the app crashes before it can bind port 8080.",
+        "evidence": [
+          "Log line: FATAL: invalid configuration APP_MODE='prodution' (from ConfigMap backend-config); expected 'development' or 'production'",
+          "Pod backend-api-85db55fcd-c9rhr is CrashLoopBackOff with 3 restarts and last_exit_code 1",
+          "Readiness probe warning shows connection refused to 10.244.0.10:8080/healthz, consistent with the application not running"
+        ],
+        "fix": "Change APP_MODE from 'prodution' to 'production' in ConfigMap/ecommerce/backend-config, then restart the backend-api deployment so new pods load the corrected configuration.",
+        "kubectl_commands": [
+          "kubectl get configmap -n ecommerce backend-config -o yaml",
+          "kubectl patch configmap -n ecommerce backend-config --type merge -p '{\"data\":{\"APP_MODE\":\"production\"}}'",
+          "kubectl rollout restart deployment/backend-api -n ecommerce",
+          "kubectl rollout status deployment/backend-api -n ecommerce"
+        ],
+        "prevention": "Add a CI validation step that rejects any ConfigMap where APP_MODE is not one of the application's accepted values (development, production) before it is applied to the cluster.",
+        "confidence": 95,
+        "confidence_reasons": [
+          "The log line explicitly names the bad value, its source ConfigMap, and the expected values; the pod crash state and exit code 1 corroborate a startup configuration rejection.",
+          "Pod ecommerce/backend-api-85db55fcd-c9rhr is CrashLoopBackOff with 3 restart(s)",
+          "Logs show: FATAL: invalid configuration APP_MODE='prodution' (from ConfigMap backend-config); expected 'development' or 'production'",
+          "11 event(s) for this pod: BackOff, Unhealthy"
+        ],
+        "warnings": []
+      }
+    ],
+    "other_issues": []
+  }
+}
